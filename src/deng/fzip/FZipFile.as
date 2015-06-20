@@ -20,11 +20,11 @@
 
 package deng.fzip
 {
-	import deng.utils.ChecksumUtil;
-	
-	import flash.utils.*;
+    import deng.utils.ChecksumUtil;
 
-	/**
+    import flash.utils.*;
+
+    /**
 	 * Represents a file contained in a ZIP archive.
 	 */		
 	public class FZipFile
@@ -53,7 +53,7 @@ package deng.fzip
 		internal var _sizeCompressed:uint = 0;
 		internal var _sizeUncompressed:uint = 0;
 
-		protected var isCompressed:Boolean = false;
+		protected var _isCompressed:Boolean = false;
 		protected var parseFunc:Function = parseFileHead;
 
 		// compression methods
@@ -152,7 +152,7 @@ package deng.fzip
 		 * The raw, uncompressed file. 
 		 */
 		public function get content():ByteArray {
-			if(isCompressed) {
+			if(_isCompressed) {
 				uncompress();
 			}
 			return _content;
@@ -168,15 +168,13 @@ package deng.fzip
 		 * @param doCompress Compress the data after adding.
 		 */
 		public function setContent(data:ByteArray, doCompress:Boolean = true):void {
-			if(data != null && data.length > 0) {
+            _content.clear();
+            _isCompressed = false;
+            if(data != null && data.length > 0) {
 				data.position = 0;
 				data.readBytes(_content, 0, data.length);
 				_crc32 = ChecksumUtil.CRC32(_content);
 				_hasAdler32 = false;
-			} else {
-				_content.length = 0;
-				_content.position = 0;
-				isCompressed = false;
 			}
 			if(doCompress) {
 				compress();
@@ -206,6 +204,13 @@ package deng.fzip
 		public function get sizeUncompressed():uint {
 			return _sizeUncompressed;
 		}
+
+        /**
+		 * If the file is compressed.
+		 */
+		public function get isCompressed():Boolean {
+			return _isCompressed;
+		}
 		
 		/**
 		 * Gets the files content as string.
@@ -218,7 +223,7 @@ package deng.fzip
 		 * @return The file as string.
 		 */
 		public function getContentAsString(recompress:Boolean = true, charset:String = "utf-8"):String {
-			if(isCompressed) {
+			if(_isCompressed) {
 				uncompress();
 			}
 			_content.position = 0;
@@ -247,7 +252,7 @@ package deng.fzip
 		public function setContentAsString(value:String, charset:String = "utf-8", doCompress:Boolean = true):void {
 			_content.length = 0;
 			_content.position = 0;
-			isCompressed = false;
+			_isCompressed = false;
 			if(value != null && value.length > 0) {
 				if(charset == "utf-8") {
 					_content.writeUTFBytes(value);
@@ -296,7 +301,7 @@ package deng.fzip
 			// - unicode as specified in _filenameEncoding 
 			stream.writeShort((_filenameEncoding == "utf-8") ? 0x0800 : 0);
 			// Write compression method (always deflate)
-			stream.writeShort(isCompressed ? COMPRESSION_DEFLATED : COMPRESSION_NONE);
+			stream.writeShort(_isCompressed ? COMPRESSION_DEFLATED : COMPRESSION_NONE);
 			// Write date
 			var d:Date = (_date != null) ? _date : new Date();
 			var msdosTime:uint = uint(d.getSeconds()) | (uint(d.getMinutes()) << 5) | (uint(d.getHours()) << 11);
@@ -329,7 +334,7 @@ package deng.fzip
 			}
 			if (includeAdler32) {
 				if (!_hasAdler32) {
-					var compressed:Boolean = isCompressed;
+					var compressed:Boolean = _isCompressed;
 					if (compressed) { uncompress(); }
 					_adler32 = ChecksumUtil.Adler32(_content, 0, _content.length);
 					_hasAdler32 = true;
@@ -370,7 +375,7 @@ package deng.fzip
 			// Write file
 			var fileSize:uint = 0;
 			if(!centralDir && _content.length > 0) {
-				if(isCompressed) {
+				if(_isCompressed) {
 					if(HAS_UNCOMPRESS || HAS_INFLATE) {
 						fileSize = _content.length;
 						stream.writeBytes(_content, 0, fileSize);
@@ -382,7 +387,7 @@ package deng.fzip
 					fileSize = _content.length;
 					stream.writeBytes(_content, 0, fileSize);
 				}
-			}
+            }
 			var size:uint = 30 + filenameSize + extrafieldsSize + commentSize + fileSize;
 			if(centralDir) {
 				size += 16;
@@ -552,10 +557,10 @@ package deng.fzip
 				} else {
 					throw new Error("Adler32 checksum not found.");
 				}
-				isCompressed = true;
+				_isCompressed = true;
 			} else if(_compressionMethod == COMPRESSION_NONE) {
 				data.readBytes(_content, 0, _sizeCompressed);
-				isCompressed = false;
+				_isCompressed = false;
 			} else {
 				throw new Error("Compression method " + _compressionMethod + " is not supported.");
 			}
@@ -566,7 +571,7 @@ package deng.fzip
 		 * @private
 		 */		
 		protected function compress():void {
-			if(!isCompressed) {
+			if(!_isCompressed) {
 				if(_content.length > 0) {
 					_content.position = 0;
 					_sizeUncompressed = _content.length;
@@ -581,7 +586,7 @@ package deng.fzip
 						_sizeCompressed = _content.length - 6;
 					}
 					_content.position = 0;
-					isCompressed = true;
+					_isCompressed = true;
 				} else {
 					_sizeCompressed = 0;
 					_sizeUncompressed = 0;
@@ -593,7 +598,7 @@ package deng.fzip
 		 * @private
 		 */		
 		protected function uncompress():void {
-			if(isCompressed && _content.length > 0) {
+			if(_isCompressed && _content.length > 0) {
 				_content.position = 0;
 				if(HAS_INFLATE) {
 					_content.inflate();
@@ -603,8 +608,13 @@ package deng.fzip
 					_content.uncompress();
 				}
 				_content.position = 0;
-				isCompressed = false;
-			}
+				_isCompressed = false;
+                _sizeUncompressed = _sizeCompressed = _content.length;
+            }
+            else {
+                _sizeCompressed = 0;
+                _sizeUncompressed = 0;
+            }
 		}
 		
 		/**

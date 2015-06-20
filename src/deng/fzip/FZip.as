@@ -297,7 +297,7 @@ package deng.fzip
 		 * @return A reference to a FZipFile object
 		 */				
 		public function getFileByName(name:String):FZipFile {
-			return filesDict[name] ? filesDict[name] as FZipFile : null;
+			return filesDict && filesDict[name] ? filesDict[name] as FZipFile : null;
 		}
 
 		/**
